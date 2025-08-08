@@ -1,0 +1,280 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MoneyTracker</title>
+  <style>
+    :root {
+      --bg: #fff;
+      --text: #111;
+      --card: #f3f3f3;
+    }
+    [data-theme='dark'] {
+      --bg: #121212;
+      --text: #fff;
+      --card: #1f1f1f;
+    }
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: #007bff;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+    }
+    nav {
+      display: flex;
+      justify-content: space-around;
+      background: #eee;
+    }
+    nav button {
+      flex: 1;
+      padding: 1rem;
+      border: none;
+      background: #ddd;
+    }
+    nav button.active {
+      background: #ccc;
+      font-weight: bold;
+    }
+    section {
+      display: none;
+      padding: 1rem;
+    }
+    section.active {
+      display: block;
+    }
+    .card {
+      background: var(--card);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 10px;
+    }
+    input, select {
+      width: 100%;
+      padding: 0.5rem;
+      margin-top: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    button.action {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 0.5rem;
+      width: 100%;
+      border-radius: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    td, th {
+      padding: 0.5rem;
+      border-bottom: 1px solid #ccc;
+    }
+    .actions button {
+      margin-right: 5px;
+    }
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+    }
+    .theme-toggle {
+      text-align: center;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💰 MoneyTracker</h1>
+  </header>
+
+  <nav>
+    <button onclick="switchTab('salary')" class="active">Salary</button>
+    <button onclick="switchTab('debt')">Debt</button>
+    <button onclick="switchTab('expense')">Expenses</button>
+    <button onclick="switchTab('summary')">Summary</button>
+  </nav>
+
+  <section id="salary" class="active">
+    <div class="card">
+      <label>Enter Salary (RM)</label>
+      <input type="number" id="salaryInput">
+      <button class="action" onclick="addItem('salary')">Add Salary</button>
+    </div>
+    <div class="card" id="salaryList"></div>
+  </section>
+
+  <section id="debt">
+    <div class="card">
+      <label>Enter Debt (RM)</label>
+      <input type="number" id="debtInput">
+      <button class="action" onclick="addItem('debt')">Add Debt</button>
+    </div>
+    <div class="card" id="debtList"></div>
+  </section>
+
+  <section id="expense">
+    <div class="card">
+      <label>Enter Expense (RM)</label>
+      <input type="number" id="expenseInput">
+      <label>Category</label>
+      <select id="expenseCategory">
+        <option>Food</option>
+        <option>Transport</option>
+        <option>Utilities</option>
+        <option>Entertainment</option>
+        <option>Other</option>
+      </select>
+      <button class="action" onclick="addItem('expense')">Add Expense</button>
+    </div>
+    <div class="card" id="expenseList"></div>
+  </section>
+
+  <section id="summary">
+    <div class="card" id="summaryCard">Loading summary...</div>
+    <div class="card"><canvas id="barChart"></canvas></div>
+    <div class="card"><canvas id="pieChart"></canvas></div>
+    <div class="theme-toggle">
+      <button onclick="toggleTheme()">Toggle Theme</button>
+    </div>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const data = JSON.parse(localStorage.getItem("moneyTrackerV2")) || {
+      salary: [],
+      debt: [],
+      expense: []
+    };
+
+    let editingIndex = null;
+
+    function saveData() {
+      localStorage.setItem("moneyTrackerV2", JSON.stringify(data));
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll("nav button").forEach(btn => btn.classList.remove("active"));
+      document.querySelectorAll("section").forEach(sec => sec.classList.remove("active"));
+      document.querySelector(`nav button[onclick*='${tabId}']`).classList.add("active");
+      document.getElementById(tabId).classList.add("active");
+      updateUI();
+    }
+
+    function addItem(type) {
+      let val, category;
+      if (type === 'salary') {
+        val = parseFloat(document.getElementById('salaryInput').value);
+        if (val) data.salary.push(val);
+      } else if (type === 'debt') {
+        val = parseFloat(document.getElementById('debtInput').value);
+        if (val) data.debt.push(val);
+      } else if (type === 'expense') {
+        val = parseFloat(document.getElementById('expenseInput').value);
+        category = document.getElementById('expenseCategory').value;
+        if (val && category) data.expense.push({ amount: val, category });
+      }
+      saveData();
+      updateUI();
+    }
+
+    function deleteItem(type, i) {
+      data[type].splice(i, 1);
+      saveData();
+      updateUI();
+    }
+
+    function updateUI() {
+      ['salary', 'debt', 'expense'].forEach(type => {
+        const listEl = document.getElementById(type + 'List');
+        let html = "<table>";
+        html += "<tr><th>Amount (RM)</th>" + (type === 'expense' ? "<th>Category</th>" : "") + "<th>Actions</th></tr>";
+        data[type].forEach((item, i) => {
+          const amt = type === 'expense' ? item.amount : item;
+          const cat = type === 'expense' ? item.category : '';
+          html += `<tr>
+            <td>RM${amt}</td>
+            ${cat ? `<td>${cat}</td>` : ''}
+            <td class="actions">
+              <button onclick="deleteItem('${type}', ${i})">🗑</button>
+            </td>
+          </tr>`;
+        });
+        html += "</table>";
+        listEl.innerHTML = html;
+      });
+
+      const totalSalary = data.salary.reduce((a, b) => a + b, 0);
+      const totalDebt = data.debt.reduce((a, b) => a + b, 0);
+      const totalExpense = data.expense.reduce((a, b) => a + b.amount, 0);
+      const balance = totalSalary - totalDebt - totalExpense;
+
+      document.getElementById("summaryCard").innerText =
+        `Total Salary: RM${totalSalary.toFixed(2)}
+` +
+        `Total Debt: RM${totalDebt.toFixed(2)}
+` +
+        `Total Expenses: RM${totalExpense.toFixed(2)}
+` +
+        `Remaining: RM${balance.toFixed(2)}`;
+
+      drawCharts(totalSalary, totalDebt, totalExpense);
+    }
+
+    function drawCharts(salary, debt, expense) {
+      if (window.barChart) window.barChart.destroy();
+      if (window.pieChart) window.pieChart.destroy();
+
+      const bar = document.getElementById('barChart').getContext('2d');
+      window.barChart = new Chart(bar, {
+        type: 'bar',
+        data: {
+          labels: ['Salary', 'Debt', 'Expenses', 'Remaining'],
+          datasets: [{
+            label: 'Amount (RM)',
+            data: [salary, debt, expense, salary - debt - expense],
+            backgroundColor: ['#28a745', '#dc3545', '#ffc107', '#17a2b8']
+          }]
+        }
+      });
+
+      const pie = document.getElementById('pieChart').getContext('2d');
+      const catTotals = {};
+      data.expense.forEach(e => {
+        catTotals[e.category] = (catTotals[e.category] || 0) + e.amount;
+      });
+
+      window.pieChart = new Chart(pie, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(catTotals),
+          datasets: [{
+            data: Object.values(catTotals),
+            backgroundColor: ['#007bff', '#6610f2', '#e83e8c', '#fd7e14', '#20c997']
+          }]
+        }
+      });
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (!document.documentElement.hasAttribute("data-theme")) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+      updateUI();
+    });
+  </script>
+</body>
+</html>
